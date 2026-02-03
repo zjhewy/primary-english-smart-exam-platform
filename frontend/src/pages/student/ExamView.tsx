@@ -25,6 +25,37 @@ interface ExamViewProps {
   duration: number;
 }
 
+const sanitizeHTML = (html: string): string => {
+  const temp = document.createElement('div');
+  temp.textContent = html;
+  return temp.innerHTML;
+};
+
+const getLocalStorageItem = (key: string): string | null => {
+  try {
+    return localStorage.getItem(key);
+  } catch (error) {
+    console.error('读取localStorage失败:', error);
+    return null;
+  }
+};
+
+const setLocalStorageItem = (key: string, value: string): void => {
+  try {
+    localStorage.setItem(key, value);
+  } catch (error) {
+    console.error('写入localStorage失败:', error);
+  }
+};
+
+const removeLocalStorageItem = (key: string): void => {
+  try {
+    localStorage.removeItem(key);
+  } catch (error) {
+    console.error('删除localStorage失败:', error);
+  }
+};
+
 const ExamView: React.FC<ExamViewProps> = ({
   paperId,
   examToken,
@@ -83,12 +114,12 @@ const ExamView: React.FC<ExamViewProps> = ({
       setQuestions(data.questions);
       setTimeRemaining(duration);
 
-      const savedAnswers = localStorage.getItem(`exam_${examToken}_answers`);
+      const savedAnswers = getLocalStorageItem(`exam_${examToken}_answers`);
       if (savedAnswers) {
         setAnswers(JSON.parse(savedAnswers));
       }
 
-      const savedIndex = localStorage.getItem(`exam_${examToken}_index`);
+      const savedIndex = getLocalStorageItem(`exam_${examToken}_index`);
       if (savedIndex) {
         setCurrentIndex(parseInt(savedIndex, 10));
       }
@@ -104,7 +135,7 @@ const ExamView: React.FC<ExamViewProps> = ({
     const newAnswers = { ...answers, [questionId]: answer };
     setAnswers(newAnswers);
 
-    localStorage.setItem(`exam_${examToken}_answers`, JSON.stringify(newAnswers));
+    setLocalStorageItem(`exam_${examToken}_answers`, JSON.stringify(newAnswers));
 
     saveProgress(examToken, {
       answers: newAnswers,
@@ -116,7 +147,7 @@ const ExamView: React.FC<ExamViewProps> = ({
     if (currentIndex > 0) {
       const newIndex = currentIndex - 1;
       setCurrentIndex(newIndex);
-      localStorage.setItem(`exam_${examToken}_index`, newIndex.toString());
+      setLocalStorageItem(`exam_${examToken}_index`, newIndex.toString());
     }
   };
 
@@ -124,7 +155,7 @@ const ExamView: React.FC<ExamViewProps> = ({
     if (currentIndex < questions.length - 1) {
       const newIndex = currentIndex + 1;
       setCurrentIndex(newIndex);
-      localStorage.setItem(`exam_${examToken}_index`, newIndex.toString());
+      setLocalStorageItem(`exam_${examToken}_index`, newIndex.toString());
     }
   };
 
@@ -152,8 +183,8 @@ const ExamView: React.FC<ExamViewProps> = ({
       setResult(response);
       setSubmitted(true);
 
-      localStorage.removeItem(`exam_${examToken}_answers`);
-      localStorage.removeItem(`exam_${examToken}_index`);
+      removeLocalStorageItem(`exam_${examToken}_answers`);
+      removeLocalStorageItem(`exam_${examToken}_index`);
 
       message.success('提交成功！');
     } catch (error) {
@@ -277,12 +308,12 @@ const ExamView: React.FC<ExamViewProps> = ({
           {currentQuestion.reading_material && (
             <div className="reading-material">
               <h3>阅读材料:</h3>
-              <p>{currentQuestion.reading_material}</p>
+              <p>{sanitizeHTML(currentQuestion.reading_material)}</p>
             </div>
           )}
 
           <div className="question-content">
-            <h3>{currentQuestion.content}</h3>
+            <h3>{sanitizeHTML(currentQuestion.content)}</h3>
           </div>
 
           {currentQuestion.options && (

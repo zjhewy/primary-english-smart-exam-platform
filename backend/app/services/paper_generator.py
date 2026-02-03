@@ -37,6 +37,18 @@ class PaperConfig:
 
 
 class PaperGenerator:
+    TYPE_ORDER = {
+        'single_choice': 0,
+        'listening': 1,
+        'reading': 2
+    }
+
+    DIFFICULTY_ORDER = {
+        'easy': 0,
+        'medium': 1,
+        'hard': 2
+    }
+
     def __init__(self):
         self.TOLERANCE = 0.05
 
@@ -108,7 +120,7 @@ class PaperGenerator:
         questions_by_difficulty: Dict[str, List[Question]],
         target_score: int,
         difficulty_dist: Dict[str, float],
-        used_ids: set
+        used_ids: Set[str]
     ) -> List[Question]:
         selected = []
         current_score = 0
@@ -158,21 +170,13 @@ class PaperGenerator:
         return best
 
     def _sort_questions(self, questions: List[Question]) -> List[Question]:
-        order = {
-            'single_choice': 0,
-            'listening': 1,
-            'reading': 2
-        }
-
-        difficulty_order = {
-            'easy': 0,
-            'medium': 1,
-            'hard': 2
-        }
-
         return sorted(
             questions,
-            key=lambda q: (order.get(q.type.value, 3), difficulty_order.get(q.difficulty.value, 0), q.unit)
+            key=lambda q: (
+                self.TYPE_ORDER.get(q.type.value, 3),
+                self.DIFFICULTY_ORDER.get(q.difficulty.value, 0),
+                q.unit
+            )
         )
 
     def validate_paper(self, selected: List[Question], config: PaperConfig) -> Dict[str, any]:

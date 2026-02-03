@@ -3,7 +3,7 @@ import hashlib
 import aiofiles
 from fastapi import UploadFile, HTTPException, status
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import mimetypes
 import logging
 
@@ -163,13 +163,11 @@ class AudioService:
         )
 
     async def delete_audio(self, file_id: str) -> bool:
-        from datetime import datetime as dt, timedelta
-
         deleted = False
 
         for ext in ['.mp3', '.wav']:
             for month_offset in range(3):
-                now = dt.now() - timedelta(days=month_offset * 30)
+                now = datetime.now() - timedelta(days=month_offset * 30)
                 year = now.strftime('%Y')
                 month = now.strftime('%m')
 

@@ -20,26 +20,22 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- 创建枚举类型
 DO $$ BEGIN
     CREATE TYPE question_type AS ENUM ('single_choice', 'listening', 'reading');
-EXCEPTION
-    WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object THEN null;
 END $$;
 
 DO $$ BEGIN
     CREATE TYPE difficulty_level AS ENUM ('easy', 'medium', 'hard');
-EXCEPTION
-    WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object THEN null;
 END $$;
 
 DO $$ BEGIN
     CREATE TYPE user_role AS ENUM ('teacher', 'student', 'admin');
-EXCEPTION
-    WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object THEN null;
 END $$;
 
 DO $$ BEGIN
     CREATE TYPE exam_status AS ENUM ('pending', 'in_progress', 'submitted', 'overdue');
-EXCEPTION
-    WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object THEN null;
 END $$;
 
 -- 创建用户表

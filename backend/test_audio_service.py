@@ -64,7 +64,7 @@ class AudioValidator:
 
 def test_mime_type_validation():
     """测试MIME类型验证"""
-    print("\n1️⃣  测试MIME类型验证...")
+    print("\n1. 测试MIME类型验证...")
     print("-" * 60)
 
     test_cases = [
@@ -78,14 +78,14 @@ def test_mime_type_validation():
 
     for content_type, should_pass in test_cases:
         is_valid, message = AudioValidator.validate_mime_type(content_type)
-        status = "✅" if (is_valid == should_pass) else "❌"
+        status = "[PASS]" if (is_valid == should_pass) else "[FAIL]"
         print(f"   {status} {content_type:20s} - {message}")
 
-    print("   ✅ MIME类型验证测试完成")
+    print("   [OK] MIME类型验证测试完成")
 
 def test_file_header_validation():
     """测试文件头验证"""
-    print("\n2️⃣  测试文件头验证...")
+    print("\n2. 测试文件头验证...")
     print("-" * 60)
 
     test_cases = [
@@ -100,61 +100,60 @@ def test_file_header_validation():
 
     for file_bytes, content_type, should_pass in test_cases:
         is_valid, message = AudioValidator.validate_file_header(file_bytes, content_type)
-        status = "✅" if (is_valid == should_pass) else "❌"
+        status = "[PASS]" if (is_valid == should_pass) else "[FAIL]"
         print(f"   {status} {content_type:20s} - {message}")
 
-    print("   ✅ 文件头验证测试完成")
+    print("   [OK] 文件头验证测试完成")
 
 def test_file_size_validation():
     """测试文件大小验证"""
-    print("\n3️⃣  测试文件大小验证...")
+    print("\n3. 测试文件大小验证...")
     print("-" * 60)
 
     test_cases = [
-        (1024, True),                # 1KB
-        (1024 * 1024, True),         # 1MB
-        (5 * 1024 * 1024, True),    # 5MB
-        (10 * 1024 * 1024, True),   # 10MB
-        (11 * 1024 * 1024, False),  # 11MB
-        (20 * 1024 * 1024, False),  # 20MB
+        (1024, True),
+        (1024 * 1024, True),
+        (5 * 1024 * 1024, True),
+        (10 * 1024 * 1024, True),
+        (11 * 1024 * 1024, False),
+        (20 * 1024 * 1024, False),
     ]
 
     for file_size, should_pass in test_cases:
         is_valid, message = AudioValidator.validate_file_size(file_size)
-        status = "✅" if (is_valid == should_pass) else "❌"
+        status = "[PASS]" if (is_valid == should_pass) else "[FAIL]"
         print(f"   {status} {file_size / (1024*1024):8.2f}MB - {message}")
 
-    print("   ✅ 文件大小验证测试完成")
+    print("   [OK] 文件大小验证测试完成")
 
 def test_hash_calculation():
     """测试哈希计算"""
-    print("\n4️⃣  测试哈希计算...")
+    print("\n4. 测试哈希计算...")
     print("-" * 60)
 
     test_contents = [
         b"test audio content",
         b"another test file",
-        b"",  # 空文件
+        b"",
     ]
 
     for content in test_contents:
         file_hash = AudioValidator.calculate_hash(content)
-        print(f"   ✅ 内容: '{content[:20] if content else '(empty)'}'")
+        print(f"   [OK] 内容: '{content[:20] if content else '(empty)'}'")
         print(f"      哈希: {file_hash}")
 
-    # 测试相同内容的哈希
     hash1 = AudioValidator.calculate_hash(b"test content")
     hash2 = AudioValidator.calculate_hash(b"test content")
     if hash1 == hash2:
-        print(f"   ✅ 相同内容生成相同哈希: {hash1}")
+        print(f"   [OK] 相同内容生成相同哈希: {hash1}")
     else:
-        print(f"   ❌ 相同内容生成不同哈希")
+        print(f"   [FAIL] 相同内容生成不同哈希")
 
-    print("   ✅ 哈希计算测试完成")
+    print("   [OK] 哈希计算测试完成")
 
 def test_storage_path_generation():
     """测试存储路径生成"""
-    print("\n5️⃣  测试存储路径生成...")
+    print("\n5. 测试存储路径生成...")
     print("-" * 60)
 
     test_cases = [
@@ -165,65 +164,58 @@ def test_storage_path_generation():
 
     for file_hash, extension in test_cases:
         path = AudioValidator.generate_storage_path(file_hash, extension)
-        print(f"   ✅ 文件: {file_hash}{extension}")
+        print(f"   [OK] 文件: {file_hash}{extension}")
         print(f"      路径: {path}")
 
-    print("   ✅ 存储路径生成测试完成")
+    print("   [OK] 存储路径生成测试完成")
 
 def test_full_workflow():
     """测试完整工作流"""
-    print("\n6️⃣  测试完整上传工作流...")
+    print("\n6. 测试完整上传工作流...")
     print("-" * 60)
 
-    # 模拟上传文件
     content = b"ID3\x04\x00\x00\x00\x00\x00\x00This is a test MP3 file content"
     content_type = 'audio/mpeg'
     file_size = len(content)
 
-    print("   📤 模拟上传文件...")
+    print("   [UPLOAD] 模拟上传文件...")
     print(f"      大小: {file_size} bytes")
     print(f"      类型: {content_type}")
 
-    # 步骤1：验证MIME类型
     is_valid, message = AudioValidator.validate_mime_type(content_type)
-    print(f"   1. MIME类型验证: {'✅' if is_valid else '❌'} - {message}")
+    print(f"   1. MIME类型验证: {'[PASS]' if is_valid else '[FAIL]'} - {message}")
     if not is_valid:
-        print("   ❌ 上传失败")
+        print("   [FAIL] 上传失败")
         return False
 
-    # 步骤2：验证文件头
     is_valid, message = AudioValidator.validate_file_header(content[:10], content_type)
-    print(f"   2. 文件头验证: {'✅' if is_valid else '❌'} - {message}")
+    print(f"   2. 文件头验证: {'[PASS]' if is_valid else '[FAIL]'} - {message}")
     if not is_valid:
-        print("   ❌ 上传失败")
+        print("   [FAIL] 上传失败")
         return False
 
-    # 步骤3：验证文件大小
     is_valid, message = AudioValidator.validate_file_size(file_size)
-    print(f"   3. 文件大小验证: {'✅' if is_valid else '❌'} - {message}")
+    print(f"   3. 文件大小验证: {'[PASS]' if is_valid else '[FAIL]'} - {message}")
     if not is_valid:
-        print("   ❌ 上传失败")
+        print("   [FAIL] 上传失败")
         return False
 
-    # 步骤4：计算哈希
     file_hash = AudioValidator.calculate_hash(content)
     print(f"   4. 文件哈希: {file_hash}")
 
-    # 步骤5：生成存储路径
     storage_path = AudioValidator.generate_storage_path(file_hash, '.mp3')
     print(f"   5. 存储路径: {storage_path}")
 
-    print("   ✅ 完整工作流测试成功！")
+    print("   [OK] 完整工作流测试成功！")
     return True
 
 def main():
     """主测试函数"""
     print("=" * 60)
-    print("🎵 音频文件处理测试")
+    print("音频文件处理测试")
     print("=" * 60)
 
     try:
-        # 执行所有测试
         test_mime_type_validation()
         test_file_header_validation()
         test_file_size_validation()
@@ -232,12 +224,12 @@ def main():
         test_full_workflow()
 
         print("\n" + "=" * 60)
-        print("✅ 所有测试通过！")
+        print("[OK] 所有测试通过！")
         print("=" * 60)
         return True
 
     except Exception as e:
-        print(f"\n❌ 测试失败: {e}")
+        print(f"\n[FAIL] 测试失败: {e}")
         import traceback
         traceback.print_exc()
         return False

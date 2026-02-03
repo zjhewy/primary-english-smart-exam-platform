@@ -20,6 +20,9 @@ router = APIRouter(prefix="/questions", tags=["题库管理"])
 logger = logging.getLogger(__name__)
 audio_service = AudioService()
 
+ROLE_TEACHER = "teacher"
+ROLE_ADMIN = "admin"
+
 
 @router.post("/", response_model=QuestionResponse, status_code=status.HTTP_201_CREATED)
 async def create_question(
@@ -38,7 +41,7 @@ async def create_question(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role != "teacher":
+    if current_user.role != ROLE_TEACHER:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="只有教师可以创建题目"
@@ -81,9 +84,18 @@ async def create_question(
     )
 
     question = Question(**question_data.model_dump(), created_by=current_user.id)
-    db.add(question)
-    db.commit()
-    db.refresh(question)
+    
+    try:
+        db.add(question)
+        db.commit()
+        db.refresh(question)
+    except Exception as e:
+        db.rollback()
+        logger.error(f"创建题目失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="创建题目失败，请重试"
+        )
 
     logger.info(f"教师 {current_user.username} 创建了题目 {question.id}")
 
@@ -117,7 +129,8 @@ async def list_questions(
         query = query.filter(Question.difficulty == difficulty)
 
     if keyword:
-        query = query.filter(Question.content.ilike(f"%{keyword}%"))
+        pattern = f"%{keyword}%"
+        query = query.filter(Question.content.ilike(pattern))
 
     total = query.count()
     questions = query.offset((page - 1) * page_size).limit(page_size).all()
@@ -162,7 +175,7 @@ async def update_question(
             detail="题目不存在"
         )
 
-    if question.created_by != current_user.id and current_user.role != "admin":
+    if question.created_by != current_user.id and current_user.role != ROLE_ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="您没有权限修改此题目"
@@ -179,8 +192,16 @@ async def update_question(
     for field, value in update_data.items():
         setattr(question, field, value)
 
-    db.commit()
-    db.refresh(question)
+    try:
+        db.commit()
+        db.refresh(question)
+    except Exception as e:
+        db.rollback()
+        logger.error(f"更新题目失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="更新题目失败，请重试"
+        )
 
     logger.info(f"教师 {current_user.username} 更新了题目 {question_id}")
 
@@ -201,7 +222,7 @@ async def delete_question(
             detail="题目不存在"
         )
 
-    if question.created_by != current_user.id and current_user.role != "admin":
+    if question.created_by != current_user.id and current_user.role != ROLE_ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="您没有权限删除此题目"
@@ -210,8 +231,16 @@ async def delete_question(
     if question.audio_file_id:
         await audio_service.delete_audio(question.audio_file_id)
 
-    db.delete(question)
-    db.commit()
+    try:
+        db.delete(question)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"删除题目失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="删除题目失败，请重试"
+        )
 
     logger.info(f"教师 {current_user.username} 删除了题目 {question_id}")
 

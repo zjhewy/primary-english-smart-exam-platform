@@ -42,7 +42,7 @@ class PaperConfig:
 
 def generate_test_questions(count: int = 100) -> List[Question]:
     """生成测试题目"""
-    print("📝 生成测试题目...")
+    print("[GEN] 生成测试题目...")
     questions = []
     types = [QuestionType.SINGLE_CHOICE, QuestionType.LISTENING, QuestionType.READING]
     difficulties = [Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD]
@@ -61,7 +61,7 @@ def generate_test_questions(count: int = 100) -> List[Question]:
 
 def print_statistics(questions: List[Question]):
     """打印题目统计信息"""
-    print("\n📊 题目统计：")
+    print("\n[STAT] 题目统计：")
 
     type_count = {}
     for q in questions:
@@ -161,18 +161,15 @@ def validate_paper(selected: List[Question], config: PaperConfig) -> dict:
 def main():
     """主测试函数"""
     print("=" * 60)
-    print("🎯 自动组卷算法测试")
+    print("自动组卷算法测试")
     print("=" * 60)
 
-    # 步骤1：生成测试题目
     questions = generate_test_questions(100)
-    print(f"✅ 成功生成 {len(questions)} 道测试题目")
+    print(f"[OK] 成功生成 {len(questions)} 道测试题目")
 
-    # 步骤2：显示题目统计
     print_statistics(questions)
 
-    # 步骤3：创建组卷配置
-    print("\n📋 创建组卷配置...")
+    print("\n[CONFIG] 创建组卷配置...")
     config = PaperConfig(
         grade_range=[3, 4],
         unit_range=[1, 6],
@@ -188,28 +185,24 @@ def main():
             'hard': 0.2
         }
     )
-    print("✅ 组卷配置已创建")
+    print("[OK] 组卷配置已创建")
     print(f"   - 年级范围: {config.grade_range}")
     print(f"   - 单元范围: {config.unit_range}")
     print(f"   - 总分: {config.total_score}")
     print(f"   - 题型分布: {config.question_distribution}")
     print(f"   - 难度分布: {config.difficulty_distribution}")
 
-    # 步骤4：筛选题目
-    print("\n🔍 筛选符合条件的题目...")
+    print("\n[FILTER] 筛选符合条件的题目...")
     filtered = filter_questions(questions, config)
-    print(f"✅ 筛选出 {len(filtered)} 道符合条件的题目")
+    print(f"[OK] 筛选出 {len(filtered)} 道符合条件的题目")
 
-    # 显示筛选后的统计
     print_statistics(filtered)
 
-    # 步骤5：执行组卷
-    print("\n🎲 执行自动组卷...")
+    print("\n[GEN] 执行自动组卷...")
     selected = generate_paper(config, filtered)
-    print(f"✅ 成功选中 {len(selected)} 道题目")
+    print(f"[OK] 成功选中 {len(selected)} 道题目")
 
-    # 步骤6：验证结果
-    print("\n✅ 验证组卷结果...")
+    print("\n[VALIDATE] 验证组卷结果...")
     result = validate_paper(selected, config)
 
     total_score = result['total_score']
@@ -232,23 +225,21 @@ def main():
         actual_ratio = (score / total_score) * 100
         print(f"   - {diff:8s}: {score:3d} 分 ({actual_ratio:.1f}%, 目标: {target_ratio:.1f}%)")
 
-    # 步骤7：显示选中的题目
-    print("\n📄 选中的题目列表：")
+    print("\n[LIST] 选中的题目列表：")
     for i, q in enumerate(selected, 1):
         print(f"   {i:2d}. [{q.type:12s}] {q.id} - {q.grade}年级-{q.unit}单元 - {q.difficulty} - {q.score}分")
 
-    # 步骤8：最终验证
     print("\n" + "=" * 60)
-    print("🎯 测试结果")
+    print("[RESULT] 测试结果")
     print("=" * 60)
 
     if deviation <= config.total_score * 0.1:
-        print(f"✅ 组卷成功！偏差在允许范围内（10%）")
+        print(f"[OK] 组卷成功！偏差在允许范围内（10%）")
         print(f"   实际得分: {total_score}/{config.total_score}")
         print(f"   偏差: {deviation:.1f}%")
         return True
     else:
-        print(f"⚠️  组卷结果偏差较大")
+        print(f"[WARN] 组卷结果偏差较大")
         print(f"   实际得分: {total_score}/{config.total_score}")
         print(f"   偏差: {deviation:.1f}%")
         return False
@@ -258,7 +249,7 @@ if __name__ == "__main__":
         success = main()
         sys.exit(0 if success else 1)
     except Exception as e:
-        print(f"\n❌ 测试失败: {e}")
+        print(f"\n[FAIL] 测试失败: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
