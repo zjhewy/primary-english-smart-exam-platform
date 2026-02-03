@@ -52,8 +52,18 @@ async def create_question(
 
     audio_file_id = None
     if audio_file:
-        upload_result = await audio_service.upload_audio(audio_file)
-        audio_file_id = upload_result['file_id']
+        try:
+            upload_result = await audio_service.upload_audio(audio_file)
+            audio_file_id = upload_result['file_id']
+        except HTTPException as e:
+            logger.error(f"音频上传失败: {e.detail}")
+            raise e
+        except Exception as e:
+            logger.error(f"音频上传异常: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="音频上传失败，请重试"
+            )
 
     question_data = QuestionCreate(
         type=type,
@@ -61,16 +71,16 @@ async def create_question(
         unit=unit,
         difficulty=difficulty,
         content=content,
-        options=options.split(',') if options else None,
+        options=options.split(',') if options and options.strip() else None,
         correct_answer=correct_answer,
         audio_file_id=audio_file_id,
         reading_material=reading_material,
-        knowledge_points=knowledge_points.split(',') if knowledge_points else None,
-        tags=tags.split(',') if tags else None,
+        knowledge_points=knowledge_points.split(',') if knowledge_points and knowledge_points.strip() else None,
+        tags=tags.split(',') if tags and tags.strip() else None,
         score=score
     )
 
-    question = Question(**question_data.dict(), created_by=current_user.id)
+    question = Question(**question_data.model_dump(), created_by=current_user.id)
     db.add(question)
     db.commit()
     db.refresh(question)
@@ -158,7 +168,13 @@ async def update_question(
             detail="您没有权限修改此题目"
         )
 
-    update_data = question_update.dict(exclude_unset=True)
+    update_data = question_update.model_dump(exclude_unset=True)
+
+    if 'created_by' in update_data and update_data['created_by'] != question.created_by:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="不允许修改题目创建者"
+        )
 
     for field, value in update_data.items():
         setattr(question, field, value)

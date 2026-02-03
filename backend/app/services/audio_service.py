@@ -5,9 +5,12 @@ from fastapi import UploadFile, HTTPException, status
 from typing import Optional
 from datetime import datetime
 import mimetypes
+import logging
 
 from oss2 import Auth, Bucket
 from oss2.exceptions import OssError
+
+logger = logging.getLogger(__name__)
 
 
 class AudioService:
@@ -47,7 +50,7 @@ class AudioService:
                 detail='文件格式验证失败，请上传有效的音频文件'
             )
 
-        if file.size and file.size > self.max_file_size:
+        if file.size is None or file.size > self.max_file_size:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f'音频文件过大，最大支持 {self.max_file_size // 1024 // 1024}MB'
@@ -160,27 +163,39 @@ class AudioService:
         )
 
     async def delete_audio(self, file_id: str) -> bool:
-        now = datetime.now()
-        year = now.strftime('%Y')
-        month = now.strftime('%m')
-
-        extensions = ['.mp3', '.wav']
+        from datetime import datetime as dt, timedelta
 
         deleted = False
 
-        for ext in extensions:
-            storage_path = f'audio-files/{year}/{month}/{file_id}{ext}'
+        for ext in ['.mp3', '.wav']:
+            for month_offset in range(3):
+                now = dt.now() - timedelta(days=month_offset * 30)
+                year = now.strftime('%Y')
+                month = now.strftime('%m')
 
-            if self.oss_enabled:
-                try:
-                    self.bucket.delete_object(storage_path)
-                    deleted = True
-                except OssError:
-                    pass
-            else:
-                full_path = os.path.join(self.local_storage_path, year, month, f'{file_id}{ext}')
-                if os.path.exists(full_path):
-                    os.remove(full_path)
-                    deleted = True
+                storage_path = f'audio-files/{year}/{month}/{file_id}{ext}'
+
+                if self.oss_enabled:
+                    try:
+                        if self.bucket.object_exists(storage_path):
+                            self.bucket.delete_object(storage_path)
+                            deleted = True
+                            logger.info(f"已删除 OSS 音频文件: {storage_path}")
+                            break
+                    except OssError as e:
+                        logger.warning(f"删除 OSS 文件失败: {storage_path}, 错误: {str(e)}")
+                else:
+                    full_path = os.path.join(self.local_storage_path, year, month, f'{file_id}{ext}')
+                    if os.path.exists(full_path):
+                        try:
+                            os.remove(full_path)
+                            deleted = True
+                            logger.info(f"已删除本地音频文件: {full_path}")
+                            break
+                        except OSError as e:
+                            logger.warning(f"删除本地文件失败: {full_path}, 错误: {str(e)}")
+
+            if deleted:
+                break
 
         return deleted

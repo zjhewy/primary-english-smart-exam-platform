@@ -33,7 +33,11 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
       const current = audio.currentTime;
       const total = audio.duration;
       setCurrentTime(current);
-      setProgress((current / total) * 100);
+      if (total > 0) {
+        setProgress((current / total) * 100);
+      } else {
+        setProgress(0);
+      }
     };
 
     const handleLoadedMetadata = () => {

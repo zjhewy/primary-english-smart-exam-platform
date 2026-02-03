@@ -69,7 +69,16 @@ const ExamView: React.FC<ExamViewProps> = ({
     try {
       setLoading(true);
       const response = await fetch(`/api/exam/${examToken}`);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
       const data = await response.json();
+
+      if (!data || !Array.isArray(data.questions)) {
+        throw new Error('返回的数据格式不正确');
+      }
 
       setQuestions(data.questions);
       setTimeRemaining(duration);
@@ -84,7 +93,8 @@ const ExamView: React.FC<ExamViewProps> = ({
         setCurrentIndex(parseInt(savedIndex, 10));
       }
     } catch (error) {
-      message.error('加载试卷失败');
+      console.error('加载试卷失败:', error);
+      message.error(error instanceof Error ? error.message : '加载试卷失败');
     } finally {
       setLoading(false);
     }
@@ -122,8 +132,12 @@ const ExamView: React.FC<ExamViewProps> = ({
     const unanswered = questions.filter((q) => !answers[q.id]);
 
     if (unanswered.length > 0) {
-      message.warning(`还有 ${unanswered.length} 道题目未完成，请确认后再提交`);
-      return;
+      const confirmSubmit = window.confirm(
+        `还有 ${unanswered.length} 道题目未完成，确定要提交吗？`
+      );
+      if (!confirmSubmit) {
+        return;
+      }
     }
 
     try {
@@ -143,6 +157,7 @@ const ExamView: React.FC<ExamViewProps> = ({
 
       message.success('提交成功！');
     } catch (error) {
+      console.error('提交失败:', error);
       message.error('提交失败，请重试');
     } finally {
       setSubmitting(false);
