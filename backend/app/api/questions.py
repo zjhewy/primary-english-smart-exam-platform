@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import logging
@@ -14,6 +14,7 @@ from backend.app.schemas.question import (
     QuestionResponse,
     QuestionListResponse
 )
+from sqlalchemy import func
 
 
 router = APIRouter(prefix="/questions", tags=["题库管理"])
@@ -26,27 +27,45 @@ ROLE_ADMIN = "admin"
 
 @router.post("/", response_model=QuestionResponse, status_code=status.HTTP_201_CREATED)
 async def create_question(
-    type: str = Form(...),
-    grade: int = Form(...),
-    unit: int = Form(...),
-    difficulty: str = Form(...),
-    content: str = Form(...),
-    options: Optional[str] = Form(None),
-    correct_answer: str = Form(...),
+    type: str = Form(..., description="题目类型", max_length=50),
+    grade: int = Form(..., ge=1, le=6, description="年级"),
+    unit: int = Form(..., ge=1, le=12, description="单元"),
+    difficulty: str = Form(..., description="难度等级", max_length=20),
+    content: str = Form(..., description="题目内容", max_length=5000),
+    options: Optional[str] = Form(None, description="选项列表", max_length=2000),
+    correct_answer: str = Form(..., description="正确答案", max_length=100),
     audio_file: Optional[UploadFile] = File(None),
-    reading_material: Optional[str] = Form(None),
-    knowledge_points: Optional[str] = Form(None),
-    tags: Optional[str] = Form(None),
-    score: int = Form(2),
+    reading_material: Optional[str] = Form(None, description="阅读材料", max_length=10000),
+    knowledge_points: Optional[str] = Form(None, description="知识点", max_length=500),
+    tags: Optional[str] = Form(None, description="标签", max_length=500),
+    score: int = Form(2, ge=1, le=20, description="分数"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role != ROLE_TEACHER:
+    # 验证用户权限
+    if current_user.role not in ["teacher", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="只有教师可以创建题目"
+            detail="只有教师或管理员可以创建题目"
         )
 
+    # 验证题目类型
+    allowed_types = ["single_choice", "listening", "reading"]
+    if type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"不支持的题目类型: {type}，支持的类型: {', '.join(allowed_types)}"
+        )
+    
+    # 验证难度等级
+    allowed_difficulties = ["easy", "medium", "hard"]
+    if difficulty not in allowed_difficulties:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"不支持的难度等级: {difficulty}，支持的等级: {', '.join(allowed_difficulties)}"
+        )
+
+    # 验证听力题音频要求
     if type == "listening" and not audio_file:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -104,16 +123,23 @@ async def create_question(
 
 @router.get("/", response_model=QuestionListResponse)
 async def list_questions(
-    grade: Optional[int] = None,
-    unit: Optional[int] = None,
-    type: Optional[str] = None,
-    difficulty: Optional[str] = None,
-    keyword: Optional[str] = None,
-    page: int = 1,
-    page_size: int = 20,
+    grade: Optional[int] = Query(None, ge=1, le=6, description="年级筛选"),
+    unit: Optional[int] = Query(None, ge=1, le=12, description="单元筛选"),
+    type: Optional[str] = Query(None, description="题目类型筛选", regex="^(single_choice|listening|reading)?$"),
+    difficulty: Optional[str] = Query(None, description="难度等级筛选", regex="^(easy|medium|hard)?$"),
+    keyword: Optional[str] = Query(None, description="关键词搜索", max_length=100),
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=100, description="每页数量"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # 验证输入参数
+    if page_size > 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="每页数量不能超过100"
+        )
+
     query = db.query(Question)
 
     if grade:
@@ -129,10 +155,16 @@ async def list_questions(
         query = query.filter(Question.difficulty == difficulty)
 
     if keyword:
+        # 使用ILIKE进行不区分大小写的模糊搜索，防SQL注入
         pattern = f"%{keyword}%"
         query = query.filter(Question.content.ilike(pattern))
 
-    total = query.count()
+    # 使用子查询获取总数，提高性能
+    total_query = db.query(func.count(Question.id))
+    for filter_clause in query._where_criteria:
+        total_query = total_query.filter(filter_clause)
+    total = total_query.scalar()
+
     questions = query.offset((page - 1) * page_size).limit(page_size).all()
 
     return {

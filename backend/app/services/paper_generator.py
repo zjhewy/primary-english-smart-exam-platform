@@ -2,6 +2,9 @@ from typing import List, Dict, Optional, Set, Any
 from dataclasses import dataclass
 import random
 from enum import Enum
+import hashlib
+import json
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 
@@ -25,6 +28,13 @@ class Question:
     unit: int
     difficulty: Difficulty
     score: int
+    content: Optional[str] = None
+    options: Optional[List[str]] = None
+    correct_answer: Optional[str] = None
+    audio_file_id: Optional[str] = None
+    reading_material: Optional[str] = None
+    knowledge_points: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
 
 
 @dataclass
@@ -49,10 +59,46 @@ class PaperGenerator:
         'hard': 2
     }
 
-    def __init__(self):
+    def __init__(self, redis_client=None):
         self.TOLERANCE = 0.05
+        self.redis = redis_client  # Redis客户端用于缓存
 
-    def generate_paper(self, config: PaperConfig, questions: List[Question]) -> List[Question]:
+    def get_config_hash(self, config: PaperConfig) -> str:
+        """生成配置的哈希值作为缓存键"""
+        config_str = f"{sorted(config.grade_range)}_{sorted(config.unit_range)}_" \
+                    f"{config.total_score}_{sorted(config.question_distribution.items())}_" \
+                    f"{sorted(config.difficulty_distribution.items())}"
+        return hashlib.md5(config_str.encode()).hexdigest()
+
+    async def get_cached_paper(self, config_hash: str) -> Optional[List[Question]]:
+        """从缓存获取试卷"""
+        if not self.redis:
+            return None
+            
+        cache_key = f"paper:{config_hash}"
+        cached_result = await self.redis.get(cache_key)
+        if cached_result:
+            question_dicts = json.loads(cached_result)
+            return [Question(**qd) for qd in question_dicts]
+        return None
+
+    async def cache_paper(self, config_hash: str, questions: List[Question], ttl: int = 3600):
+        """缓存生成的试卷"""
+        if not self.redis:
+            return
+            
+        cache_key = f"paper:{config_hash}"
+        question_dicts = [q.__dict__ for q in questions]
+        await self.redis.setex(cache_key, ttl, json.dumps(question_dicts))
+
+    async def generate_paper(self, config: PaperConfig, questions: List[Question]) -> List[Question]:
+        # 检查缓存
+        config_hash = self.get_config_hash(config)
+        if self.redis:
+            cached = await self.get_cached_paper(config_hash)
+            if cached:
+                return cached
+
         if not questions:
             raise ValueError("题库中没有可用的题目")
 
@@ -66,8 +112,14 @@ class PaperGenerator:
 
         if not selected:
             raise ValueError("无法生成试卷，题目数量不足")
-
-        return self._sort_questions(selected)
+        
+        result = self._sort_questions(selected)
+        
+        # 保存到缓存
+        if self.redis:
+            await self.cache_paper(config_hash, result)
+        
+        return result
 
     def _filter_questions(self, questions: List[Question], config: PaperConfig) -> List[Question]:
         filtered = []
@@ -174,7 +226,7 @@ class PaperGenerator:
             questions,
             key=lambda q: (
                 self.TYPE_ORDER.get(q.type.value, 3),
-                self.DIFFICULTY_ORDER.get(q.difficulty.value, 0),
+                self.DIFFICULTY_ORDER.get(q.difficulty.value, 3),  # 改为3而不是0，这样未定义的难度排在最后
                 q.unit
             )
         )
@@ -185,8 +237,10 @@ class PaperGenerator:
         score_by_difficulty = {}
 
         for q in selected:
-            score_by_type[q.type.value] = score_by_type.get(q.type.value, 0) + q.score
-            score_by_difficulty[q.difficulty.value] = score_by_difficulty.get(q.difficulty.value, 0) + q.score
+            type_key = q.type.value
+            diff_key = q.difficulty.value
+            score_by_type[type_key] = score_by_type.get(type_key, 0) + q.score
+            score_by_difficulty[diff_key] = score_by_difficulty.get(diff_key, 0) + q.score
 
         return {
             'total_score': total_score,

@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { PlayCircleOutlined, PauseCircleOutlined } from '@ant-design/icons';
 import './AudioPlayer.css';
 
@@ -8,6 +8,7 @@ interface AudioPlayerProps {
   onPlay?: () => void;
   onPause?: () => void;
   onError?: (error: Error) => void;
+  title?: string; // 添加标题属性提高无障碍性
 }
 
 const AudioPlayer: React.FC<AudioPlayerProps> = ({
@@ -15,7 +16,8 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   autoPlay = false,
   onPlay,
   onPause,
-  onError
+  onError,
+  title = "音频播放器"
 }) => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -25,7 +27,27 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 验证URL的安全性
   useEffect(() => {
+    try {
+      const url = new URL(audioUrl);
+      const allowedProtocols = ['http:', 'https:'];
+      if (!allowedProtocols.includes(url.protocol)) {
+        setError('非法的音频URL协议');
+        return;
+      }
+    } catch (err) {
+      setError('无效的音频URL');
+      return;
+    }
+  }, [audioUrl]);
+
+  useEffect(() => {
+    if (error) {
+      onError?.(new Error(error));
+      return;
+    }
+
     const audio = audioRef.current;
     if (!audio) return;
 
@@ -81,21 +103,24 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('error', handleError);
     };
-  }, [onPlay, onPause, onError]);
+  }, [onPlay, onPause, onError, error]);
 
   useEffect(() => {
-    if (autoPlay && audioRef.current) {
+    if (autoPlay && audioRef.current && !error) {
       audioRef.current.play().catch((err) => {
         setError('自动播放失败，请手动播放');
       });
     }
-  }, [autoPlay, audioUrl]);
+  }, [autoPlay, audioUrl, error]);
 
-  const togglePlay = () => {
+  const togglePlay = useCallback(() => {
+    if (error) {
+      setError(null);  // 清除错误后重新尝试
+      return;
+    }
+
     const audio = audioRef.current;
     if (!audio) return;
-
-    setError(null);
 
     if (playing) {
       audio.pause();
@@ -106,11 +131,13 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
         setLoading(false);
       });
     }
-  };
+  }, [playing, error]);
 
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (error) return;
+
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || isNaN(audio.duration)) return;
 
     const progressBar = e.currentTarget;
     const rect = progressBar.getBoundingClientRect();
@@ -121,7 +148,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   };
 
   const formatTime = (seconds: number): string => {
-    if (isNaN(seconds)) return '0:00';
+    if (isNaN(seconds) || seconds < 0) return '0:00';
 
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -130,10 +157,14 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
 
   if (error) {
     return (
-      <div className="audio-player audio-player-error">
+      <div className="audio-player audio-player-error" role="alert" aria-live="polite">
         <span className="error-icon">⚠️</span>
         <span className="error-message">{error}</span>
-        <button onClick={togglePlay} className="retry-button">
+        <button 
+          onClick={() => setError(null)} 
+          className="retry-button"
+          aria-label="重试播放"
+        >
           重试
         </button>
       </div>
@@ -141,11 +172,12 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   }
 
   return (
-    <div className="audio-player">
+    <div className="audio-player" role="region" aria-label={title}>
       <audio
         ref={audioRef}
         src={audioUrl}
         preload="metadata"
+        aria-label={title}
       />
 
       <button
@@ -155,7 +187,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
         aria-label={playing ? '暂停' : '播放'}
       >
         {loading ? (
-          <span className="loading-spinner" />
+          <span className="loading-spinner" role="progressbar" aria-valuetext="加载中"/>
         ) : playing ? (
           <PauseCircleOutlined className="icon" />
         ) : (
@@ -170,16 +202,21 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
         aria-valuenow={progress}
         aria-valuemin={0}
         aria-valuemax={100}
+        aria-label="播放进度条"
       >
         <div className="progress-bar">
-          <div className="progress-fill" style={{ width: `${progress}%` }} />
+          <div 
+            className="progress-fill" 
+            style={{ width: `${progress}%` }} 
+            aria-hidden="true"
+          />
         </div>
       </div>
 
       <div className="time-display">
-        <span className="current-time">{formatTime(currentTime)}</span>
-        <span className="time-separator">/</span>
-        <span className="total-time">{formatTime(duration)}</span>
+        <span className="current-time" aria-label="当前播放时间">{formatTime(currentTime)}</span>
+        <span className="time-separator" aria-hidden="true">/</span>
+        <span className="total-time" aria-label="总时长">{formatTime(duration)}</span>
       </div>
     </div>
   );

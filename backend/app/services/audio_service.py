@@ -6,9 +6,16 @@ from typing import Optional
 from datetime import datetime, timedelta
 import mimetypes
 import logging
+from pathlib import Path
 
-from oss2 import Auth, Bucket
-from oss2.exceptions import OssError
+# 只有在启用OSS时才导入oss2
+oss_available = os.getenv('ALIYUN_OSS_ACCESS_KEY') is not None
+if oss_available:
+    try:
+        from oss2 import Auth, Bucket
+        from oss2.exceptions import OssError
+    except ImportError:
+        Auth, Bucket, OssError = None, None, None
 
 logger = logging.getLogger(__name__)
 
@@ -18,15 +25,28 @@ class AudioService:
         self.oss_enabled = os.getenv('ALIYUN_OSS_ACCESS_KEY') is not None
 
         if self.oss_enabled:
-            self.auth = Auth(
-                os.getenv('ALIYUN_OSS_ACCESS_KEY'),
-                os.getenv('ALIYUN_OSS_SECRET_KEY')
-            )
-            self.bucket = Bucket(
-                self.auth,
-                os.getenv('ALIYUN_OSS_ENDPOINT', 'oss-cn-hangzhou.aliyuncs.com'),
-                os.getenv('ALIYUN_OSS_BUCKET')
-            )
+            # 检查是否正确安装了oss2
+            if Auth is None or Bucket is None:
+                logger.warning("OSS2未安装，将切换至本地存储模式")
+                self.oss_enabled = False
+                self.local_storage_path = os.getenv('LOCAL_STORAGE_PATH', './uploads/audio')
+                os.makedirs(self.local_storage_path, exist_ok=True)
+            else:
+                try:
+                    self.auth = Auth(
+                        os.getenv('ALIYUN_OSS_ACCESS_KEY'),
+                        os.getenv('ALIYUN_OSS_SECRET_KEY')
+                    )
+                    self.bucket = Bucket(
+                        self.auth,
+                        os.getenv('ALIYUN_OSS_ENDPOINT', 'oss-cn-hangzhou.aliyuncs.com'),
+                        os.getenv('ALIYUN_OSS_BUCKET')
+                    )
+                except Exception as e:
+                    logger.warning(f"OSS初始化失败: {e}，将切换至本地存储模式")
+                    self.oss_enabled = False
+                    self.local_storage_path = os.getenv('LOCAL_STORAGE_PATH', './uploads/audio')
+                    os.makedirs(self.local_storage_path, exist_ok=True)
         else:
             self.local_storage_path = os.getenv('LOCAL_STORAGE_PATH', './uploads/audio')
             os.makedirs(self.local_storage_path, exist_ok=True)
@@ -35,28 +55,53 @@ class AudioService:
         self.max_file_size = 10 * 1024 * 1024
 
     async def validate_audio_file(self, file: UploadFile) -> dict:
-        if file.content_type not in self.allowed_content_types:
+        # 验证文件扩展名
+        filename_lower = file.filename.lower() if file.filename else ""
+        if not any(filename_lower.endswith(ext) for ext in ['.mp3', '.wav']):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f'不支持的音频格式: {file.content_type}。支持的格式: MP3, WAV'
+                detail='不支持的文件扩展名，仅支持 MP3 和 WAV 格式'
             )
 
-        file_bytes = await file.read(1024)
-        file.file.seek(0)
+        # 验证 MIME 类型
+        real_mime = mimetypes.guess_type(filename_lower)[0] or file.content_type
+        if real_mime not in self.allowed_content_types:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f'不支持的音频格式: {real_mime}。支持的格式: MP3, WAV'
+            )
 
-        if not self._validate_file_header(file_bytes, file.content_type):
+        # 读取并验证文件头
+        file_bytes = await file.read(2048)  # 只读取前面的字节进行验证
+        file.file.seek(0)  # 重置文件指针
+        
+        if not self._validate_file_header(file_bytes, real_mime):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail='文件格式验证失败，请上传有效的音频文件'
             )
 
-        if file.size is None or file.size > self.max_file_size:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f'音频文件过大，最大支持 {self.max_file_size // 1024 // 1024}MB'
-            )
-
-        return {'content_type': file.content_type, 'size': file.size}
+        # 验证文件大小
+        if file.size is not None:
+            if file.size > self.max_file_size:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f'音频文件过大，最大支持 {self.max_file_size // 1024 // 1024}MB'
+                )
+        else:
+            # 如果无法直接获取文件大小，读取整个文件并验证大小
+            file_contents = await file.read()
+            if len(file_contents) > self.max_file_size:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f'音频文件过大，最大支持 {self.max_file_size // 1024 // 1024}MB'
+                )
+            # 重置文件指针并重新分配内容
+            import io
+            file.file = io.BytesIO(file_contents)
+            file.size = len(file_contents)
+        
+        return {'content_type': real_mime, 'size': file.size}
 
     def _validate_file_header(self, file_bytes: bytes, content_type: str) -> bool:
         if content_type == 'audio/mpeg' or content_type == 'audio/mp3':
@@ -104,6 +149,12 @@ class AudioService:
         }
 
     async def _upload_to_oss(self, file: UploadFile, storage_path: str, file_hash: str) -> str:
+        if not self.oss_enabled or self.bucket is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail='OSS服务不可用，请检查配置'
+            )
+            
         try:
             if self.bucket.object_exists(storage_path):
                 return file_hash
@@ -114,6 +165,11 @@ class AudioService:
             return file_hash
 
         except OssError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f'音频上传失败: {str(e)}'
+            )
+        except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f'音频上传失败: {str(e)}'

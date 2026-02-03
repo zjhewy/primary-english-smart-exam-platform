@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, Radio, Button, Progress, Space, message, Spin } from 'antd';
 import { LeftOutlined, RightOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
+import DOMPurify from 'dompurify'; // 引入DOMPurify库进行更严格的HTML清理
 import AudioPlayer from '../../components/AudioPlayer';
 import { submitExam, saveProgress } from '../../services/exam';
 import './ExamView.css';
@@ -25,10 +26,15 @@ interface ExamViewProps {
   duration: number;
 }
 
+// 改进的HTML清理函数
 const sanitizeHTML = (html: string): string => {
-  const temp = document.createElement('div');
-  temp.textContent = html;
-  return temp.innerHTML;
+  if (!html) return '';
+  
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'p', 'br', 'ul', 'ol', 'li', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'],
+    ALLOWED_ATTR: [],
+    FORBID_TAGS: ['script', 'object', 'embed', 'form', 'input', 'meta']
+  });
 };
 
 const getLocalStorageItem = (key: string): string | null => {
